@@ -5,11 +5,23 @@ import (
 	"testing"
 )
 
-func TestYears(t *testing.T) {
-	y := Years(7)
+func TestYears(T *testing.T) {
+	type test struct {
+		data   int
+		answer int
+	}
 
-	if y != 49 {
-		t.Error("Expected 49 got", y)
+	tests := []test{
+		test{7, 49},
+		test{10, 70},
+		test{4, 28},
+	}
+
+	for _, t := range tests {
+		y := Years(t.data)
+		if y != t.answer {
+			T.Error("got", y, "want", t.answer)
+		}
 	}
 }
 
