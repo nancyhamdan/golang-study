@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"os"
 	"time"
 )
@@ -17,26 +18,31 @@ type quizQuestion struct {
 }
 
 func main() {
-	fileName := flag.String("cf", "problems.csv", "change quiz questions file")
-	timeLimitFlag := flag.String("t", "30s", "set the time limit for the quiz")
+	fileNameFlag := flag.String("cf", "problems.csv", "change quiz questions file, set to problems.csv by default.")
+	timeLimitFlag := flag.String("t", "30s", "set the time limit for the quiz, set to 30s by default.")
+	shuffleFlag := flag.Bool("shuffle", true, "decide whether the quiz questions should get shuffled with each run or not, set to true by default.")
 	flag.Parse()
 
-	timeLimit, _ := time.ParseDuration(*timeLimitFlag)
-	fmt.Println("time limit = ", timeLimit)
-
-	f, err := os.Open(*fileName)
-	if err != nil {
-		fmt.Println(err)
+	if *shuffleFlag == true {
+		rand.Seed(time.Now().UnixNano())
 	}
-	defer f.Close()
 
-	r := csv.NewReader(f)
-	r.LazyQuotes = true
+	timeLimit, _ := time.ParseDuration(*timeLimitFlag)
+	fmt.Println("time limit =", timeLimit)
+
+	file, fileReadErr := os.Open(*fileNameFlag)
+	if fileReadErr != nil {
+		fmt.Println(fileReadErr)
+	}
+	defer file.Close()
+
+	csvReader := csv.NewReader(file)
+	csvReader.LazyQuotes = true
 
 	var quizQuestions []quizQuestion
 
 	for {
-		record, err := r.Read()
+		record, err := csvReader.Read()
 		if err == io.EOF {
 			break
 		}
@@ -51,39 +57,50 @@ func main() {
 		quizQuestions = append(quizQuestions, q)
 	}
 
-	noCorrectAnswers := 0
-
-	reader := bufio.NewReader(os.Stdin)
+	bufioReader := bufio.NewReader(os.Stdin)
 	fmt.Println("Enter anything to start:")
-	_, _, rerr := reader.ReadRune()
-	if rerr != nil {
-		log.Fatal(rerr)
+	_, _, bufioReadErr := bufioReader.ReadRune()
+	if bufioReadErr != nil {
+		log.Fatal(bufioReadErr)
 	}
 
 	timeNow := time.Now()
+	numCorrectAnswers := 0
 
 	go func() {
-		for i, v := range quizQuestions {
-			fmt.Println("time since = ", time.Since(timeNow))
-			fmt.Println("Problem #", i+1, ":", v.question, "=")
-
-			var userAnswer string
-
-			_, err := fmt.Scan(&userAnswer)
-			if err != nil {
-				log.Fatal("scanning answer error:", err)
+		if *shuffleFlag == true {
+			indices := rand.Perm(len(quizQuestions))
+			for _, v := range indices {
+				fmt.Println("time left:", timeLimit-time.Since(timeNow))
+				askQuestion(quizQuestions[v], &numCorrectAnswers)
 			}
-			if userAnswer == v.answer {
-				noCorrectAnswers++
+		} else {
+			for _, q := range quizQuestions {
+				fmt.Println("time left:", timeLimit-time.Since(timeNow))
+				askQuestion(q, &numCorrectAnswers)
 			}
 		}
+		fmt.Println("You got", numCorrectAnswers, "correct questions out of", len(quizQuestions), "total questions.")
+		os.Exit(0)
 	}()
 
 	for {
 		if time.Since(timeNow) >= timeLimit {
 			fmt.Println("Time is up!")
-			fmt.Println(noCorrectAnswers, "correct questions out of", len(quizQuestions), "total questions.")
+			fmt.Println("You got", numCorrectAnswers, "correct questions out of", len(quizQuestions), "total questions.")
 			os.Exit(0)
 		}
+	}
+}
+
+func askQuestion(q quizQuestion, numCorrectAnswers *int) {
+	var userAnswer string
+	fmt.Println(q.question, "=")
+	_, err := fmt.Scan(&userAnswer)
+	if err != nil {
+		log.Fatal("scanning answer error:", err)
+	}
+	if userAnswer == q.answer {
+		*numCorrectAnswers++
 	}
 }
